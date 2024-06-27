@@ -156,9 +156,7 @@ async function proxy(req, res) {
             'Accept-Encoding': 'gzip, deflate, br, lzma, lzma2, zstd',
             'Upgrade-Insecure-Requests': '1',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'DNT': '1',
-            'x-forwarded-for': req.headers['x-forwarded-for'] || req.ip,
-            via: '2.0 bandwidth-hero'
+            'DNT': '1'
         },
         timeout: 25000,
         maxRedirects: 5,
