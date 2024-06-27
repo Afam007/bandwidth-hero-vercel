@@ -81,7 +81,7 @@ function saveCFClearanceCookie(domain, cookieValue) {
 
      
 
-      return `${parsedUrl.protocol}//${baseDomain}`;
+      return `${parsedUrl.protocol}//${baseDomain}/`;
 
     
 
@@ -95,7 +95,7 @@ function getBaseUrl(url) {
 
   const parsedUrl = new URL(url);
 
-  return `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+  return `${parsedUrl.protocol}//${parsedUrl.hostname}/`;
 
 }
 
@@ -116,7 +116,8 @@ async function proxy(req, res) {
 		
 
 	     domain = getBaseUrl(req.headers.referer);
-
+	     req.headers.referer = domain;
+         
 	} 
 
 	
@@ -215,7 +216,7 @@ async function proxy(req, res) {
                   data: {
 
                      cmd: 'request.get',
-                     url: req.headers.referer
+                     url: domain
      
                  }
 
