@@ -8,14 +8,82 @@ const redirect = require('./redirect');
 const compress = require('./compress');
 const bypass = require('./bypass');
 const copyHeaders = require('./copyHeaders');
+const {HttpsProxyAgent} = require('https-proxy-agent');
+
+var gettingCookie = false ;
+
+function readAllCFClearanceCookies() {
+    const cookiePath = path.join(__dirname, 'cf_clearance_cookies.json');
+    try {
+        if (fs.existsSync(cookiePath)) {
+            const cookiesContent = fs.readFileSync(cookiePath, 'utf8');
+            return JSON.parse(cookiesContent);
+        }
+    } catch (error) {
+        console.error('Error reading cf_clearance cookies:', error);
+    }
+    return {};
+}
+
+
+function saveCFClearanceCookie(domain, cookieValue) {
+    const cookiePath = path.join(__dirname, 'cf_clearance_cookies.json');
+    const cookies = readAllCFClearanceCookies();
+    cookies[domain] = cookieValue;
+    try {
+        fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2));
+    } catch (error) {
+        console.error(`Error saving cf_clearance cookie for ${domain}:`, error);
+    }
+}
+
+ function getBaseDomain(url) {
+     
+     const parsedUrl = new URL(url);
+     const parts = parsedUrl.hostname.split('.');
+     const baseDomain = parts.slice(-2).join('.');
+     
+      return `${parsedUrl.protocol}//${baseDomain}`;
+    
+  }
+  
+function getBaseUrl(url) {
+	
+  const parsedUrl = new URL(url);
+  return `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+}
+
+
 
 async function proxy(req, res) {
-    const config = {
+	
+	var domain = getBaseDomain(req.params.url);
+    var referer = req.headers.referer;
+	
+	if (referer) {
+		
+	     domain = getBaseUrl(req.headers.referer);
+	
+         req.headers.referer = domain;
+
+	} 
+	
+    const cookies = readAllCFClearanceCookies();
+    const cfClearanceValue = cookies[domain];
+           
+     if (cfClearanceValue) {
+     	
+           console.log(`Using saved cookie for ${domain}`);
+           req.headers.cookie = `cf_clearance=${cfClearanceValue}`;
+       }	
+       
+       
+    var config = {
         url: req.params.url,
         method: 'get',
         headers: {
             ...pick(req.headers, ['cookie', 'dnt', 'referer']),
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
             'Accept-Language': 'en-US,en;q=0.9',
             'Connection': 'keep-alive',
@@ -26,9 +94,10 @@ async function proxy(req, res) {
             'x-forwarded-for': req.headers['x-forwarded-for'] || req.ip,
             via: '2.0 bandwidth-hero'
         },
-        timeout: 10000,
+        timeout: 25000,
         maxRedirects: 5,
         responseType: 'arraybuffer',
+        httpsAgent: new HttpsProxyAgent(`http://${process.env.PROXY_USER}:${process.env.PROXY_PASS}@${process.env.PROXY_HOST}:${process.env.PROXY_PORT}`),
         validateStatus: status => status < 500,
         transformResponse: [(data, headers) => {
             if (headers['content-encoding'] === 'gzip') {
@@ -65,6 +134,44 @@ async function proxy(req, res) {
 
     try {
         const origin = await axios(config);
+        
+        console.log(`Status Code: ${origin.status}`);
+         if (origin.status === 403 ) {
+		            
+              if (gettingCookie) return ;
+         
+              gettingCookie = true ;
+              console.log("Cloudflare Bypass");
+              
+              const flaresolverrResponse = await axios({
+                  method: 'POST',
+                  url: process.env.FLARE_URL,
+                  data: {
+                     cmd: 'request.get',
+                     url: domain,
+                     ...(cfClearanceValue != null && 
+                          { cookies: [{"name": "cf_clearance", "value": cfClearanceValue }]  }   )
+                     
+                 }
+            });
+            
+               gettingCookie = false ;
+            
+                 if (flaresolverrResponse.data && flaresolverrResponse.data.solution && flaresolverrResponse.data.solution.cookies) {
+                 	
+                       const cfCookie = flaresolverrResponse.data.solution.cookies.find(cookie => cookie.name === 'cf_clearance');
+                       
+                       if (cfCookie) {
+                       	
+                           console.log(`Saving cookie for ${domain}`);
+                           saveCFClearanceCookie(domain, cfCookie.value);
+                
+                           config.headers.cookie = `cf_clearance=${cfCookie.value}`;
+                
+                           origin = await axios(config);
+                         }
+                     }
+            }
 
         copyHeaders(origin, res);
         res.setHeader('content-encoding', 'identity');
