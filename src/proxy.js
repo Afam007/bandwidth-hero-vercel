@@ -117,12 +117,6 @@ async function proxy(req, res) {
 
 	     domain = getBaseUrl(req.headers.referer);
 
-	
-
-         req.headers.referer = domain;
-
-
-
 	} 
 
 	
@@ -155,7 +149,7 @@ async function proxy(req, res) {
             'Connection': 'keep-alive',
             'Accept-Encoding': 'gzip, deflate, br, lzma, lzma2, zstd'
         },
-        timeout: 25000,
+        timeout: 20000,
         maxRedirects: 5,
         responseType: 'arraybuffer',
         httpsAgent: new HttpsProxyAgent(`http://${process.env.PROXY_USER}:${process.env.PROXY_PASS}@${process.env.PROXY_HOST}:${process.env.PROXY_PORT}`),
@@ -221,7 +215,7 @@ async function proxy(req, res) {
                   data: {
 
                      cmd: 'request.get',
-                     url: domain
+                     url: req.headers.referer
      
                  }
 
