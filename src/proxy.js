@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+const url = require('url');
 const axios = require('axios');
 const pick = require('lodash').pick;
 const zlib = require('node:zlib');
