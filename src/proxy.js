@@ -8,73 +8,136 @@ const redirect = require('./redirect');
 const compress = require('./compress');
 const bypass = require('./bypass');
 const copyHeaders = require('./copyHeaders');
-const {HttpsProxyAgent} = require('https-proxy-agent');
-
-var gettingCookie = false ;
-
-function readAllCFClearanceCookies() {
-    const cookiePath = path.join(__dirname, 'cf_clearance_cookies.json');
-    try {
-        if (fs.existsSync(cookiePath)) {
-            const cookiesContent = fs.readFileSync(cookiePath, 'utf8');
-            return JSON.parse(cookiesContent);
-        }
-    } catch (error) {
-        console.error('Error reading cf_clearance cookies:', error);
-    }
-    return {};
-}
-
-
-function saveCFClearanceCookie(domain, cookieValue) {
-    const cookiePath = path.join(__dirname, 'cf_clearance_cookies.json');
-    const cookies = readAllCFClearanceCookies();
-    cookies[domain] = cookieValue;
-    try {
-        fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2));
-    } catch (error) {
-        console.error(`Error saving cf_clearance cookie for ${domain}:`, error);
-    }
-}
-
- function getBaseDomain(url) {
-     
-     const parsedUrl = new URL(url);
-     const parts = parsedUrl.hostname.split('.');
-     const baseDomain = parts.slice(-2).join('.');
-     
-      return `${parsedUrl.protocol}//${baseDomain}`;
-    
-  }
-  
-function getBaseUrl(url) {
-	
-  const parsedUrl = new URL(url);
-  return `${parsedUrl.protocol}//${parsedUrl.hostname}`;
-}
-
+const {HttpsProxyAgent} = require('https-proxy-agent');
+
+
+
+var gettingCookie = false ;
+
+
+
+function readAllCFClearanceCookies() {
+
+    const cookiePath = path.join(__dirname, 'cf_clearance_cookies.json');
+
+    try {
+
+        if (fs.existsSync(cookiePath)) {
+
+            const cookiesContent = fs.readFileSync(cookiePath, 'utf8');
+
+            return JSON.parse(cookiesContent);
+
+        }
+
+    } catch (error) {
+
+        console.error('Error reading cf_clearance cookies:', error);
+
+    }
+
+    return {};
+
+}
+
+
+
+
+
+function saveCFClearanceCookie(domain, cookieValue) {
+
+    const cookiePath = path.join(__dirname, 'cf_clearance_cookies.json');
+
+    const cookies = readAllCFClearanceCookies();
+
+    cookies[domain] = cookieValue;
+
+    try {
+
+        fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2));
+
+    } catch (error) {
+
+        console.error(`Error saving cf_clearance cookie for ${domain}:`, error);
+
+    }
+
+}
+
+
+
+ function getBaseDomain(url) {
+
+     
+
+     const parsedUrl = new URL(url);
+
+     const parts = parsedUrl.hostname.split('.');
+
+     const baseDomain = parts.slice(-2).join('.');
+
+     
+
+      return `${parsedUrl.protocol}//${baseDomain}`;
+
+    
+
+  }
+
+  
+
+function getBaseUrl(url) {
+
+	
+
+  const parsedUrl = new URL(url);
+
+  return `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+
+}
+
+
+
 
 
 async function proxy(req, res) {
 	
-	var domain = getBaseDomain(req.params.url);
-    var referer = req.headers.referer;
-	
-	if (referer) {
-		
-	     domain = getBaseUrl(req.headers.referer);
-	
-         req.headers.referer = domain;
-
-	} 
-	
-    const cookies = readAllCFClearanceCookies();
-    const cfClearanceValue = cookies[domain];
-           
-     if (cfClearanceValue) {
-     	
-           console.log(`Using saved cookie for ${domain}`);
-           req.headers.cookie = `cf_clearance=${cfClearanceValue}`;
+	var domain = getBaseDomain(req.params.url);
+
+    var referer = req.headers.referer;
+
+	
+
+	if (referer) {
+
+		
+
+	     domain = getBaseUrl(req.headers.referer);
+
+	
+
+         req.headers.referer = domain;
+
+
+
+	} 
+
+	
+
+    const cookies = readAllCFClearanceCookies();
+
+    const cfClearanceValue = cookies[domain];
+
+           
+
+     if (cfClearanceValue) {
+
+     	
+
+           console.log(`Using saved cookie for ${domain}`);
+
+           req.headers.cookie = `cf_clearance=${cfClearanceValue}`;
+
        }	
        
        
@@ -133,45 +196,81 @@ async function proxy(req, res) {
     };
 
     try {
-        const origin = await axios(config);
+        var origin = await axios(config);
         
-        console.log(`Status Code: ${origin.status}`);
-         if (origin.status === 403 ) {
-		            
-              if (gettingCookie) return ;
-         
-              gettingCookie = true ;
-              console.log("Cloudflare Bypass");
-              
-              const flaresolverrResponse = await axios({
-                  method: 'POST',
-                  url: process.env.FLARE_URL,
-                  data: {
-                     cmd: 'request.get',
+        console.log(`Status Code: ${origin.status}`);
+
+         if (origin.status === 403 ) {
+
+		            
+
+              if (gettingCookie) return ;
+
+         
+
+              gettingCookie = true ;
+
+              console.log("Cloudflare Bypass");
+
+              
+
+              const flaresolverrResponse = await axios({
+
+                  method: 'POST',
+
+                  url: process.env.FLARE_URL,
+
+                  data: {
+
+                     cmd: 'request.get',
+
                      url: domain,
-                     ...(cfClearanceValue != null && 
-                          { cookies: [{"name": "cf_clearance", "value": cfClearanceValue }]  }   )
-                     
-                 }
-            });
-            
-               gettingCookie = false ;
-            
-                 if (flaresolverrResponse.data && flaresolverrResponse.data.solution && flaresolverrResponse.data.solution.cookies) {
-                 	
-                       const cfCookie = flaresolverrResponse.data.solution.cookies.find(cookie => cookie.name === 'cf_clearance');
-                       
-                       if (cfCookie) {
-                       	
-                           console.log(`Saving cookie for ${domain}`);
-                           saveCFClearanceCookie(domain, cfCookie.value);
-                
-                           config.headers.cookie = `cf_clearance=${cfCookie.value}`;
-                
-                           origin = await axios(config);
-                         }
-                     }
-            }
+                     ...(cfClearanceValue != null && 
+
+                          { cookies: [{"name": "cf_clearance", "value": cfClearanceValue }]  }   )
+
+                     
+
+                 }
+
+            });
+
+            
+
+               gettingCookie = false ;
+
+            
+
+                 if (flaresolverrResponse.data && flaresolverrResponse.data.solution && flaresolverrResponse.data.solution.cookies) {
+
+                 	
+
+                       const cfCookie = flaresolverrResponse.data.solution.cookies.find(cookie => cookie.name === 'cf_clearance');
+
+                       
+
+                       if (cfCookie) {
+
+                       	
+
+                           console.log(`Saving cookie for ${domain}`);
+
+                           saveCFClearanceCookie(domain, cfCookie.value);
+
+                
+
+                           config.headers.cookie = `cf_clearance=${cfCookie.value}`;
+
+                
+
+                           origin = await axios(config);
+
+                         }
+
+                     }
+
+            }
+
 
         copyHeaders(origin, res);
         res.setHeader('content-encoding', 'identity');
