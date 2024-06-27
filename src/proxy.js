@@ -155,6 +155,7 @@ async function proxy(req, res) {
             'Connection': 'keep-alive',
             'Accept-Encoding': 'gzip, deflate, br, lzma, lzma2, zstd',
             'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
             'DNT': '1'
         },
         timeout: 25000,
