@@ -85,12 +85,12 @@ async function makeHttp2Request(config) {
 
 // Create a limiter with a maximum of 1 request every 2 seconds
 const limiter = new Bottleneck({
-    maxConcurrent: 5,  // Limit to 5 concurrent requests
-    minTime: 2000      // Minimum time of 2 seconds between requests
+    maxConcurrent: 50,  // Limit to 5 concurrent requests
+    minTime: 1      // Minimum time of 2 seconds between requests
 });
 
 async function makeRequest(config) {
-    return limiter.schedule(() => axios(config));
+    return axios(config);
 }
 
 
@@ -253,8 +253,25 @@ async function makeCloudscraperRequest(config, retries = 3, redirectCount = 0) {
     }));
 }
 
+function urlContainsDomain(url, domain) {
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.hostname.includes(domain);
+  } catch (error) {
+    console.error("Invalid URL:", error);
+    return false;
+  }
+}
+
 // Proxy function to handle requests
 async function proxy(req, res) {
+
+    if (urlContainsDomain(req.params.url, process.env.DOMAIN)) {
+         console.log('Good');
+     } else {
+        return;
+     } 
+    
     const config = {
         url: new URL(req.params.url),
         method: 'get',
@@ -267,6 +284,7 @@ async function proxy(req, res) {
             'DNT': '1',
             'x-forwarded-for': req.headers['x-forwarded-for'] || req.ip,
             'Connection': 'keep-alive',
+            'Authorization': process.env.AUTH ,
         },
         timeout: 5000,
         maxRedirects: 5,
@@ -301,7 +319,7 @@ async function proxy(req, res) {
 
         // Compression Optimization: Choose the best compression method based on Accept-Encoding header
         const acceptedEncodings = req.headers['accept-encoding'] || '';
-        if (shouldCompress(req, decompressedData)) {
+       /* if (shouldCompress(req, decompressedData)) {
             if (acceptedEncodings.includes('br')) {
                 decompressedData = compressionMethods.br(decompressedData);
                 res.setHeader('Content-Encoding', 'br');
@@ -314,7 +332,7 @@ async function proxy(req, res) {
             } else {
                 res.setHeader('Content-Encoding', 'identity');
             }
-        }
+        } */
 
 
         // Copy headers and send response
