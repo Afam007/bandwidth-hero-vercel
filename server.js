@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict'
-import { injectSpeedInsights } from '@vercel/speed-insights';
+const { injectSpeedInsights } = require('@vercel/speed-insights');
 const express = require('express')
 const morgan = require('morgan')
 const authenticate = require('./src/authenticate')
