@@ -57,8 +57,26 @@ async function decompress(data, encoding) {
     }
 }
 
+async function urlContainsDomain(url, domain) {
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.hostname.includes(domain);
+  } catch (error) {
+    console.error("Invalid URL:", error);
+    return false;
+  }
+}
+
 // Proxy function to handle requests using got with HTTP/2 support
 async function proxy(req, res) {
+
+    if (await urlContainsDomain(req.params.url, process.env.DOMAIN)) {
+         console.log('url matches');
+    } else {
+         console.log('url does not match');
+        return;
+    } 
+    
     const config = {
         headers: {
             ...pick(req.headers, ['cookie', 'dnt', 'referer']),
@@ -70,6 +88,7 @@ async function proxy(req, res) {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'x-forwarded-for': req.headers['x-forwarded-for'] || req.ip,
+            'Authorization': process.env.AUTH ,
             //via: '2.0 bandwidth-hero',
         },
         timeout: { request: 10000 },
