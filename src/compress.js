@@ -94,15 +94,15 @@ function getFormatOptions(outputFormat, quality, avifParams, isAnimated) {
 function prepareImage(input, grayscale, isAnimated, metadata, pixelCount) {
   let processedImage = sharp(input, { animated: isAnimated });
   if (grayscale) processedImage = processedImage.grayscale();
-  if (!isAnimated) processedImage = applyArtifactReduction(processedImage, pixelCount);
+ // if (!isAnimated) processedImage = applyArtifactReduction(processedImage, pixelCount);
 
-  if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+ /* if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
     processedImage = processedImage.resize({
       width: Math.min(metadata.width, MAX_DIMENSION),
       height: Math.min(metadata.height, MAX_DIMENSION),
       fit: 'inside',
     });
-  }
+  } */
   return processedImage;
 }
 
