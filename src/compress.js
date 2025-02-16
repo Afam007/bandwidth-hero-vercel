@@ -91,7 +91,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
         processedImage = processedImage.grayscale();
     }
 
-    if (!isAnimated) {
+    /*if (!isAnimated) {
         processedImage = applyArtifactReduction(processedImage, pixelCount);
     }
 
@@ -102,7 +102,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
             fit: 'inside',
             withoutEnlargement: true,
         });
-    }
+    }*/
 
     return processedImage;
 }
