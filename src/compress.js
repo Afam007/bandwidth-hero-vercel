@@ -66,11 +66,11 @@ function isValidMetadata(metadata) {
 function optimizeAvifParams(width, height) {
     const area = width * height;
     if (area > LARGE_IMAGE_THRESHOLD) {
-        return { tileRows: 4, tileCols: 4, minQuantizer: 30, maxQuantizer: 50, effort: 3 };
+        return { tileRows: 4, tileCols: 4, minQuantizer: 28, maxQuantizer: 48, effort: 3 };
     } else if (area > MEDIUM_IMAGE_THRESHOLD) {
-        return { tileRows: 2, tileCols: 2, minQuantizer: 28, maxQuantizer: 48, effort: 4 };
+        return { tileRows: 2, tileCols: 2, minQuantizer: 26, maxQuantizer: 46, effort: 4 };
     } else {
-        return { tileRows: 1, tileCols: 1, minQuantizer: 26, maxQuantizer: 46, effort: 5 };
+        return { tileRows: 1, tileCols: 1, minQuantizer: 24, maxQuantizer: 44, effort: 5 };
     }
 }
 
@@ -109,10 +109,10 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
 
 function applyArtifactReduction(sharpInstance, pixelCount) {
     const settings = pixelCount > LARGE_IMAGE_THRESHOLD
-        ? { blur: 0.4, sharpen: 0.8, saturation: 0.85 }
+        ? { blur: 0.5, sharpen: 0.7, saturation: 0.8 }
         : pixelCount > MEDIUM_IMAGE_THRESHOLD
-        ? { blur: 0.35, sharpen: 0.6, saturation: 0.9 }
-        : { blur: 0.3, sharpen: 0.5, saturation: 0.95 };
+        ? { blur: 0.4, sharpen: 0.6, saturation: 0.85 }
+        : { blur: 0.3, sharpen: 0.5, saturation: 0.9 };
 
     return sharpInstance
         .modulate({ saturation: settings.saturation })
