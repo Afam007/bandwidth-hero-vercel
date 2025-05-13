@@ -65,13 +65,13 @@ async function decompress(data, encoding) {
 async function proxy(req, res) {
 
     const url = new URL(req.params.url);
-    const baseDomain = url.hostname.replace(/^www\./, ''); // Remove 'www.' if present
-    const mainDomain = process.env.DOMAIN;
-
-    if (baseDomain === mainDomain) {
-       console.log('Domains match');
+    const urlDomain = url.hostname.toLowerCase();
+    const allowedDomain = process.env.DOMAIN.toLowerCase();
+  
+    if (urlDomain === allowedDomain) {
+      console.log('Domains match');
     } else {
-       console.log('Domains do not match');
+    console.log(`Domains do not match: ${urlDomain} vs ${allowedDomain}`);
     }
     
     const config = {
