@@ -34,7 +34,8 @@ async function compress(req, res, input) {
 
         const isAnimated = metadata.pages > 1;
         const pixelCount = metadata.width * metadata.height;
-        const outputFormat = isAnimated ? 'webp' : format;
+       // const outputFormat = isAnimated ? 'webp' : format;
+        const outputFormat = 'webp'; 
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
         // Apply transformations in a pipeline to minimize intermediate buffers
