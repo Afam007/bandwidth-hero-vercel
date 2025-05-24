@@ -53,7 +53,7 @@ async function compress(req, res, input) {
 }
 
 function getCompressionParams(req) {
-    const format = req.params?.webp ? 'avif' : 'jpeg';
+    const format = req.params?.webp ? 'webp' : 'jpeg';
     const compressionQuality = Math.min(Math.max(parseInt(req.params?.quality, 10) || 75, 10), 100);
     const grayscale = req.params?.grayscale === 'true' || req.params?.grayscale === true;
     return { format, compressionQuality, grayscale };
