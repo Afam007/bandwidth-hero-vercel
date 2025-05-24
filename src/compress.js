@@ -34,8 +34,7 @@ async function compress(req, res, input) {
 
         const isAnimated = metadata.pages > 1;
         const pixelCount = metadata.width * metadata.height;
-       // const outputFormat = isAnimated ? 'webp' : format;
-        const outputFormat = 'webp'; 
+        const outputFormat = isAnimated ? 'webp' : format;
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
         // Apply transformations in a pipeline to minimize intermediate buffers
@@ -54,7 +53,7 @@ async function compress(req, res, input) {
 }
 
 function getCompressionParams(req) {
-    const format = req.params?.webp ? 'avif' : 'jpeg';
+    const format = req.params?.webp ? 'webp' : 'jpeg';
     const compressionQuality = Math.min(Math.max(parseInt(req.params?.quality, 10) || 75, 10), 100);
     const grayscale = req.params?.grayscale === 'true' || req.params?.grayscale === true;
     return { format, compressionQuality, grayscale };
