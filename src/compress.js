@@ -3,7 +3,7 @@ import redirect from './redirect.js';
 import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
 
-const MAX_DIMENSION = 16384;
+const MAX_DIMENSION = 16382;
 const LARGE_IMAGE_THRESHOLD = 4_000_000; // Use underscores for readability
 const MEDIUM_IMAGE_THRESHOLD = 1_000_000;
 
@@ -102,6 +102,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
             fit: 'inside',
             withoutEnlargement: true,
         });
+        console.log("resized");
     }
 
     return processedImage;
