@@ -3,7 +3,7 @@ import redirect from './redirect.js';
 import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
 
-const MAX_DIMENSION = 16382;
+const MAX_DIMENSION = 16383;
 const LARGE_IMAGE_THRESHOLD = 4_000_000; // Use underscores for readability
 const MEDIUM_IMAGE_THRESHOLD = 1_000_000;
 
@@ -53,7 +53,7 @@ async function compress(req, res, input) {
 }
 
 function getCompressionParams(req) {
-    const format = req.params?.webp ? 'webp' : 'jpeg';
+    const format = req.params?.webp ? 'avif' : 'jpeg';
     const compressionQuality = Math.min(Math.max(parseInt(req.params?.quality, 10) || 75, 10), 100);
     const grayscale = req.params?.grayscale === 'true' || req.params?.grayscale === true;
     return { format, compressionQuality, grayscale };
