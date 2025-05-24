@@ -102,7 +102,6 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
             fit: 'inside',
             withoutEnlargement: true,
         });
-        console.log("resized");
     }
 
     return processedImage;
