@@ -93,7 +93,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
 
     /* if (!isAnimated) {
         processedImage = applyArtifactReduction(processedImage, pixelCount);
-    }
+    } */
 
     if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
         processedImage = processedImage.resize({
@@ -102,7 +102,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
             fit: 'inside',
             withoutEnlargement: true,
         });
-    } */
+    }
 
     return processedImage;
 }
