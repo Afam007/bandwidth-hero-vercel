@@ -63,6 +63,17 @@ async function decompress(data, encoding) {
 
 // Proxy function to handle requests using got with HTTP/2 support
 async function proxy(req, res) {
+
+    const url = new URL(req.params.url);
+    const urlDomain = url.hostname.toLowerCase();
+    const allowedDomain = process.env.DOMAIN.toLowerCase();
+  
+    if (urlDomain === allowedDomain) {
+      console.log('Domains match');
+    } else {
+      console.log(`Domains do not match: ${urlDomain} vs ${allowedDomain}`);
+    }
+    
     const config = {
         headers: {
             ...pick(req.headers, ['cookie', 'dnt', 'referer']), // Using custom `pick` function
@@ -74,6 +85,7 @@ async function proxy(req, res) {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'x-forwarded-for': req.headers['x-forwarded-for'] || req.ip,
+            'Authorization': process.env.AUTH,
             //via: '2.0 bandwidth-hero',
         },
         timeout: { request: 10000 },
