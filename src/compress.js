@@ -34,11 +34,11 @@ async function compress(req, res, input) {
 
         const isAnimated = metadata.pages > 1;
         const pixelCount = metadata.width * metadata.height;
-        const outputFormat = isAnimated ? 'webp' : format;
+        var outputFormat = isAnimated ? 'webp' : format;
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
         // Apply transformations in a pipeline to minimize intermediate buffers
-        const processedImage = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount);
+        const processedImage = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount, outputFormat);
 
         // Use toFormat with options directly in the pipeline
         const { data, info } = await processedImage
@@ -84,7 +84,7 @@ function getFormatOptions(outputFormat, quality, avifParams, isAnimated) {
     return outputFormat === 'avif' ? { ...options, ...avifParams } : options;
 }
 
-function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount) {
+function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount, outputFormat) {
     let processedImage = sharpInstance.clone(); // Clone to avoid mutating the original instance
 
     if (grayscale) {
@@ -96,12 +96,13 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
     } */
 
     if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
-        processedImage = processedImage.resize({
+        outputFormat = 'jpeg';
+        /*processedImage = processedImage.resize({
             width: Math.min(metadata.width, MAX_DIMENSION),
             height: Math.min(metadata.height, MAX_DIMENSION),
             fit: 'inside',
             withoutEnlargement: true,
-        });
+        });*/
     }
 
     return processedImage;
