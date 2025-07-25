@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import redirect from './redirect.js';
 import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
+import { sliceCompress } from './sliceCompress.js';
 
 const MAX_DIMENSION = 16383;
 const LARGE_IMAGE_THRESHOLD = 4_000_000; // Use underscores for readability
@@ -34,12 +35,20 @@ async function compress(req, res, input) {
 
         const isAnimated = metadata.pages > 1;
         const pixelCount = metadata.width * metadata.height;
-        var outputFormat = isAnimated ? 'webp' : format;
+        const outputFormat = isAnimated ? 'webp' : format;
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
+        // If image is too large, slice, compress, and reassemble
+        if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+            // Only support webp output for huge images
+            outputFormat = 'webp';
+            const reassembledBuffer = await sliceCompress(input, getFormatOptions(outputFormat, compressionQuality, avifParams, isAnimated));
+            sendImage(res, reassembledBuffer, outputFormat, req.params.url || '', req.params.originSize || 0, reassembledBuffer.length);
+            return;
+        }
+
         // Apply transformations in a pipeline to minimize intermediate buffers
-        const { processedImage, finalFormat } = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount, outputFormat);
-        outputFormat = finalFormat;
+        const processedImage = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount);
 
         // Use toFormat with options directly in the pipeline
         const { data, info } = await processedImage
@@ -85,29 +94,19 @@ function getFormatOptions(outputFormat, quality, avifParams, isAnimated) {
     return outputFormat === 'avif' ? { ...options, ...avifParams } : options;
 }
 
-function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount, outputFormat) {
+function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount) {
     let processedImage = sharpInstance.clone(); // Clone to avoid mutating the original instance
-    let finalFormat = outputFormat;
     
     if (grayscale) {
         processedImage = processedImage.grayscale();
     }
 
-   /* if (!isAnimated) {
+    /* if (!isAnimated) {
         processedImage = applyArtifactReduction(processedImage, pixelCount);
     } */
 
-    if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
-        finalFormat = 'jpeg';
-        /*processedImage = processedImage.resize({
-            width: Math.min(metadata.width, MAX_DIMENSION),
-            height: Math.min(metadata.height, MAX_DIMENSION),
-            fit: 'inside',
-            withoutEnlargement: true,
-        });*/
-    }
-
-    return { processedImage, finalFormat };
+    // Remove resize for MAX_DIMENSION, now handled by sliceCompressReassemble.
+    return processedImage;
 }
 
 function applyArtifactReduction(sharpInstance, pixelCount) {
