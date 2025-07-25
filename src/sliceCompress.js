@@ -10,7 +10,7 @@ const MAX_DIMENSION = 16383;
  * @param {Object} opts - Options (supports { quality }).
  * @returns {Promise<Buffer>} - The reassembled webp buffer.
  */
-export async function sliceCompress(inputBuffer, { quality = 75 } = {}) {
+export async function sliceCompress(inputBuffer, formatOpts) {
     const meta = await sharp(inputBuffer, { animated: true }).metadata();
 
     // Determine if slicing is needed
@@ -33,7 +33,7 @@ export async function sliceCompress(inputBuffer, { quality = 75 } = {}) {
     } else {
         // No slicing needed, just compress to webp
         return sharp(inputBuffer)
-            .toFormat('webp', { quality })
+            .toFormat('webp', formatOpts)
             .toBuffer();
     }
 
@@ -57,7 +57,7 @@ export async function sliceCompress(inputBuffer, { quality = 75 } = {}) {
         }
         const slice = await sharp(inputBuffer)
             .extract(extractOpts)
-            .toFormat('webp', { quality })
+            .toFormat('webp', formatOpts)
             .toBuffer();
         slices.push({ slice, extractOpts });
     }
@@ -70,7 +70,7 @@ export async function sliceCompress(inputBuffer, { quality = 75 } = {}) {
             channels: meta.channels,
             background: { r: 0, g: 0, b: 0, alpha: 0 }
         }
-    }).toFormat('webp', { quality });
+    }).toFormat('webp', formatOpts);
 
     compositeBase = compositeBase.composite(
         slices.map(({ slice, extractOpts }) => ({
@@ -80,5 +80,5 @@ export async function sliceCompress(inputBuffer, { quality = 75 } = {}) {
         }))
     );
 
-    return await compositeBase.toBuffer();
+    return await compositeBase.toBuffer({ resolveWithObject: true });
 }
