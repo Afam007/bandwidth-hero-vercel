@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import redirect from './redirect.js';
 import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
+import sliceCompressReassemble from './sliceCompressReassemble.js';
 
 const MAX_DIMENSION = 16383;
 const LARGE_IMAGE_THRESHOLD = 4_000_000; // Use underscores for readability
@@ -30,6 +31,22 @@ async function compress(req, res, input) {
         if (!isValidMetadata(metadata)) {
             logError('Invalid or missing metadata.');
             return redirect(req, res);
+        }
+
+        // Check if image exceeds MAX_DIMENSION and needs slicing
+        if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+            try {
+                const slicedResult = await sliceCompressReassemble(input, metadata, {
+                    quality: compressionQuality,
+                    grayscale
+                });
+                
+                sendImage(res, slicedResult.buffer, slicedResult.format, req.params.url || '', req.params.originSize || 0, slicedResult.buffer.length);
+                return;
+            } catch (err) {
+                logError('Error during image slicing and reassembly:', err);
+                return redirect(req, res);
+            }
         }
 
         const isAnimated = metadata.pages > 1;
@@ -96,16 +113,6 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
    /* if (!isAnimated) {
         processedImage = applyArtifactReduction(processedImage, pixelCount);
     } */
-
-    if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
-        finalFormat = 'jpeg';
-        /*processedImage = processedImage.resize({
-            width: Math.min(metadata.width, MAX_DIMENSION),
-            height: Math.min(metadata.height, MAX_DIMENSION),
-            fit: 'inside',
-            withoutEnlargement: true,
-        });*/
-    }
 
     return { processedImage, finalFormat };
 }
