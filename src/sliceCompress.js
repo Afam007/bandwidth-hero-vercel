@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-const MAX_DIMENSION = 16383;
+const MAX_DIMENSION = 16382;
 
 /**
  * Slice an image vertically or horizontally if it exceeds MAX_DIMENSION,
@@ -55,6 +55,7 @@ export async function sliceCompress(inputBuffer, formatOpts) {
                 height: Math.min(sliceSize, totalSize - i * sliceSize),
             };
         }
+        console.log(extractOpts);
         const slice = await sharp(inputBuffer)
             .extract(extractOpts)
             .toFormat('webp', formatOpts)
