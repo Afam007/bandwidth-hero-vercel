@@ -38,7 +38,8 @@ async function compress(req, res, input) {
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
         // Apply transformations in a pipeline to minimize intermediate buffers
-        const processedImage = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount, outputFormat);
+        const { processedImage, finalFormat } = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount, outputFormat);
+        outputFormat = finalFormat;
 
         // Use toFormat with options directly in the pipeline
         const { data, info } = await processedImage
@@ -86,7 +87,8 @@ function getFormatOptions(outputFormat, quality, avifParams, isAnimated) {
 
 function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount, outputFormat) {
     let processedImage = sharpInstance.clone(); // Clone to avoid mutating the original instance
-
+    let finalFormat = outputFormat;
+    
     if (grayscale) {
         processedImage = processedImage.grayscale();
     }
@@ -96,7 +98,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
     } */
 
     if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
-        outputFormat = 'jpeg';
+        finalFormat = 'jpeg';
         /*processedImage = processedImage.resize({
             width: Math.min(metadata.width, MAX_DIMENSION),
             height: Math.min(metadata.height, MAX_DIMENSION),
@@ -105,7 +107,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
         });*/
     }
 
-    return processedImage;
+    return { processedImage, finalFormat };
 }
 
 function applyArtifactReduction(sharpInstance, pixelCount) {
