@@ -55,14 +55,14 @@ export async function sliceCompress(inputBuffer, formatOpts) {
                 height: Math.min(sliceSize, totalSize - i * sliceSize),
             };
         }
-        console.log(extractOpts);
+        
         const slice = await sharp(inputBuffer)
             .extract(extractOpts)
             .toFormat('webp', formatOpts)
             .toBuffer();
         slices.push({ slice, extractOpts });
     }
-    console.log('1');
+    
     // Reassemble
     let compositeBase = sharp({
         create: {
@@ -72,7 +72,7 @@ export async function sliceCompress(inputBuffer, formatOpts) {
             background: { r: 0, g: 0, b: 0, alpha: 0 }
         }
     }).toFormat('webp', formatOpts);
-    console.log('2');
+    
     compositeBase = compositeBase.composite(
         slices.map(({ slice, extractOpts }) => ({
             input: slice,
@@ -80,6 +80,6 @@ export async function sliceCompress(inputBuffer, formatOpts) {
             top: direction === 'horizontal' ? extractOpts.top : 0
         }))
     );
-    console.log('3');
+    
     return await compositeBase.toBuffer({ resolveWithObject: true });
 }
