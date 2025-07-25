@@ -71,7 +71,7 @@ export async function sliceCompress(inputBuffer, formatOpts) {
             channels: meta.channels,
             background: { r: 0, g: 0, b: 0, alpha: 0 }
         }
-    }).toFormat('webp', formatOpts);
+    });
     
     compositeBase = compositeBase.composite(
         slices.map(({ slice, extractOpts }) => ({
@@ -81,5 +81,5 @@ export async function sliceCompress(inputBuffer, formatOpts) {
         }))
     );
     
-    return await compositeBase.toBuffer({ resolveWithObject: true });
+    return await compositeBase.toFormat('webp', formatOpts).toBuffer({ resolveWithObject: true });
 }
