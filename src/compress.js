@@ -42,8 +42,8 @@ async function compress(req, res, input) {
         if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
             // Only support webp output for huge images
             outputFormat = 'webp';
-            const reassembledBuffer = await sliceCompress(input, getFormatOptions(outputFormat, compressionQuality, avifParams, isAnimated));
-            sendImage(res, reassembledBuffer, outputFormat, req.params.url || '', req.params.originSize || 0, reassembledBuffer.length);
+            const { data, info } = await sliceCompress(input, getFormatOptions(outputFormat, compressionQuality, avifParams, isAnimated));
+            sendImage(res, data, outputFormat, req.params.url || '', req.params.originSize || 0, info.size);
             return;
         }
 
