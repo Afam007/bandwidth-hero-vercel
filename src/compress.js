@@ -3,7 +3,7 @@ import redirect from './redirect.js';
 import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
 
-const MAX_DIMENSION = 16384;
+const MAX_DIMENSION = 16383;
 const LARGE_IMAGE_THRESHOLD = 4_000_000; // Use underscores for readability
 const MEDIUM_IMAGE_THRESHOLD = 1_000_000;
 
@@ -34,8 +34,13 @@ async function compress(req, res, input) {
 
         const isAnimated = metadata.pages > 1;
         const pixelCount = metadata.width * metadata.height;
-        const outputFormat = isAnimated ? 'webp' : format;
+        var outputFormat = isAnimated ? 'webp' : format;
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
+
+        if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+
+            outputFormat = 'jpeg';
+        }
 
         // Apply transformations in a pipeline to minimize intermediate buffers
         const processedImage = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount);
@@ -53,7 +58,7 @@ async function compress(req, res, input) {
 }
 
 function getCompressionParams(req) {
-    const format = req.params?.webp ? 'avif' : 'jpeg';
+    const format = req.params?.webp ? 'webp' : 'jpeg';
     const compressionQuality = Math.min(Math.max(parseInt(req.params?.quality, 10) || 75, 10), 100);
     const grayscale = req.params?.grayscale === 'true' || req.params?.grayscale === true;
     return { format, compressionQuality, grayscale };
@@ -92,17 +97,17 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
     }
 
     if (!isAnimated) {
-        processedImage = applyArtifactReduction(processedImage, pixelCount);
+       // processedImage = applyArtifactReduction(processedImage, pixelCount);
     }
 
-    if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+   /* if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {   
         processedImage = processedImage.resize({
             width: Math.min(metadata.width, MAX_DIMENSION),
             height: Math.min(metadata.height, MAX_DIMENSION),
             fit: 'inside',
             withoutEnlargement: true,
         });
-    }
+    } */
 
     return processedImage;
 }
