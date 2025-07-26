@@ -4,6 +4,7 @@ import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
 
 const MAX_DIMENSION = 16383;
+const MAX_DIMENSION_2 = 16383 * 2;
 const LARGE_IMAGE_THRESHOLD = 4_000_000; // Use underscores for readability
 const MEDIUM_IMAGE_THRESHOLD = 1_000_000;
 
@@ -37,7 +38,7 @@ async function compress(req, res, input) {
         var outputFormat = isAnimated ? 'webp' : format;
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
-        if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+        if (metadata.width > MAX_DIMENSION_2 || metadata.height > MAX_DIMENSION_2) {
 
             outputFormat = 'jpeg';
         }
@@ -100,14 +101,16 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
        // processedImage = applyArtifactReduction(processedImage, pixelCount);
     }
 
-   /* if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {   
+    if (metadata.width < MAX_DIMENSION_2 || metadata.height < MAX_DIMENSION_2) {   
+      if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {   
         processedImage = processedImage.resize({
             width: Math.min(metadata.width, MAX_DIMENSION),
             height: Math.min(metadata.height, MAX_DIMENSION),
             fit: 'inside',
             withoutEnlargement: true,
         });
-    } */
+      } 
+    }
 
     return processedImage;
 }
