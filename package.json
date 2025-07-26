@@ -15,16 +15,17 @@
   },
   "dependencies": {
     "basic-auth": "^2.0.1",
-    "sanitize-filename": "^1.6.3",
+    "dotenv": "^16.4.7",
     "express": "^5.1.0",
+    "gm": "^1.25.1",
     "got": "^14.4.7",
+    "helmet": "^8.1.0",
     "http2-wrapper": "^2.2.1",
     "is-animated": "^2.0.2",
-    "sharp": "^0.34.2",
-    "validator": "^13.15.0",
     "morgan": "^1.10.0",
-    "helmet": "^8.1.0",
-    "dotenv": "^16.4.7"
+    "sanitize-filename": "^1.6.3",
+    "sharp": "^0.34.2",
+    "validator": "^13.15.0"
   },
   "engines": {
     "node": "22.x"
