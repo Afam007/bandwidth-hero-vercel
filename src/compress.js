@@ -42,9 +42,9 @@ async function compress(req, res, input) {
         if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
             // Only support webp output for huge images
             outputFormat = 'webp';
-            const { data, info } = await sliceCompress(input, getFormatOptions(outputFormat, compressionQuality, avifParams, isAnimated));
+            const buffer = await sliceCompress(input, getFormatOptions(outputFormat, compressionQuality, avifParams, isAnimated));
             console.log('5');
-            sendImage(res, data, outputFormat, req.params.url || '', req.params.originSize || 0, info.size);
+            sendImage(res, buffer, outputFormat, req.params.url || '', req.params.originSize || 0, buffer.length);
             return;
         }
 
