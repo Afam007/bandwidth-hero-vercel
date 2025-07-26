@@ -67,6 +67,7 @@ export async function sliceCompress(inputBuffer, formatOpts) {
     // Extract, compress, and store each slice to disk
     for (let i = 0; i < numSlices; i++) {
         let extractOpts;
+        if ((totalSize - i * sliceSize) <= 0) continue;
         if (direction === 'vertical') {
             extractOpts = {
                 left: i * sliceSize,
@@ -82,6 +83,7 @@ export async function sliceCompress(inputBuffer, formatOpts) {
                 height: Math.min(sliceSize, totalSize - i * sliceSize),
             };
         }
+        console.log(extractOpts);
         const sliceBuffer = await sharp(inputBuffer)
             .extract(extractOpts)
             .toFormat('webp', formatOpts)
