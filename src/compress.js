@@ -35,7 +35,7 @@ async function compress(req, res, input) {
 
         const isAnimated = metadata.pages > 1;
         const pixelCount = metadata.width * metadata.height;
-        var outputFormat = isAnimated ? 'webp' : format;
+        let outputFormat = isAnimated ? 'webp' : format;
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
         if (metadata.width > MAX_DIMENSION_2 || metadata.height > MAX_DIMENSION_2) {
@@ -96,37 +96,37 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
     if (grayscale) {
         processedImage = processedImage.grayscale();
     }
-
     if (!isAnimated) {
        // processedImage = applyArtifactReduction(processedImage, pixelCount);
     }
 
-    if (metadata.width < MAX_DIMENSION_2 || metadata.height < MAX_DIMENSION_2) {   
-        
-      if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {   
-        processedImage = processedImage.resize({
-            width: Math.min(metadata.width, MAX_DIMENSION),
-            height: Math.min(metadata.height, MAX_DIMENSION),
-            fit: 'inside',
-            withoutEnlargement: true,
-        });
-      } else if (metadata.width * 0.6 > 500) {
-          processedImage = processedImage.resize({
-            width: metadata.width * 0.6,
-            height: metadata.height * 0.6,
-            fit: 'inside',
-            withoutEnlargement: true,
-        });
+    const MIN_WIDTH = pixelCount > LARGE_IMAGE_THRESHOLD ? 640 : 800; // Use 640 for large images, 800 for smaller ones
 
-      } else if (metadata.width * 0.8 > 500) {
-          processedImage = processedImage.resize({
-            width: metadata.width * 0.8,
-            height: metadata.height * 0.8,
-            fit: 'inside',
-            withoutEnlargement: true,
-        });
-      }
+    if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+        let scale = Math.min(MAX_DIMENSION / metadata.width, MAX_DIMENSION / metadata.height);
+        if (0.6 < scale && scale < 1) {
+            scale = 0.6; // Set scale to 0.6 if in range (0.6, 1)
+        }
+        if (scale >= 0.5) {
+            processedImage = processedImage.resize({
+               width: Math.round(metadata.width * scale),
+               height: Math.round(metadata.height * scale),
+               fit: 'inside',
+               withoutEnlargement: true,
+            });
+        }
         
+    } else if (metadata.width >= MIN_WIDTH) {
+        let scale = MIN_WIDTH / metadata.width;
+        if (scale < 0.5) {
+            scale = 0.5;
+        }
+        processedImage = processedImage.resize({
+           width: Math.round(metadata.width * scale),
+           height: Math.round(metadata.height * scale),
+           fit: 'inside',
+           withoutEnlargement: true,
+        });
     }
 
     return processedImage;
