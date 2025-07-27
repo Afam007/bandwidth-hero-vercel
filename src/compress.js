@@ -118,8 +118,8 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
         
     } else if (metadata.width >= MIN_WIDTH) {
         let scale = MIN_WIDTH / metadata.width;
-        if (scale < 0.5) {
-            scale = 0.5;
+        if (scale < 0.4) {
+            scale = 0.4;
         }
         processedImage = processedImage.resize({
            width: Math.round(metadata.width * scale),
