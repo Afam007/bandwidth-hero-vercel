@@ -97,7 +97,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
         processedImage = processedImage.grayscale();
     }
     if (!isAnimated) {
-        processedImage = applyArtifactReduction(processedImage, pixelCount);
+       // processedImage = applyArtifactReduction(processedImage, pixelCount);
     }
 
     const MIN_WIDTH = pixelCount > LARGE_IMAGE_THRESHOLD ? 640 : 800; // Use 640 for large images, 800 for smaller ones
