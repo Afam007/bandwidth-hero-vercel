@@ -84,7 +84,7 @@ function getFormatOptions(outputFormat, quality, avifParams, isAnimated) {
     const options = {
         quality,
         alphaQuality: 80,
-        chromaSubsampling: '4:2:0',
+        chromaSubsampling: outputFormat === 'jpeg' ? '4:2:0' : '4:4:4',
         loop: isAnimated ? 0 : undefined,
     };
     return outputFormat === 'avif' ? { ...options, ...avifParams } : options;
