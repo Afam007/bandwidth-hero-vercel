@@ -102,6 +102,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
     }
 
     if (metadata.width < MAX_DIMENSION_2 || metadata.height < MAX_DIMENSION_2) {   
+        
       if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {   
         processedImage = processedImage.resize({
             width: Math.min(metadata.width, MAX_DIMENSION),
@@ -109,7 +110,23 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
             fit: 'inside',
             withoutEnlargement: true,
         });
-      } 
+      } else if (metadata.width * 0.6 > 500) {
+          processedImage = processedImage.resize({
+            width: metadata.width * 0.6,
+            height: metadata.height * 0.6,
+            fit: 'inside',
+            withoutEnlargement: true,
+        });
+
+      } else if (metadata.width * 0.8 > 500) {
+          processedImage = processedImage.resize({
+            width: metadata.width * 0.8,
+            height: metadata.height * 0.8,
+            fit: 'inside',
+            withoutEnlargement: true,
+        });
+      }
+        
     }
 
     return processedImage;
