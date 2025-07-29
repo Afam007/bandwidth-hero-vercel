@@ -103,10 +103,10 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
     if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
         let scale = Math.min(MAX_DIMENSION / metadata.width, MAX_DIMENSION / metadata.height);
 
-        if (metadata.width * scale >= MIN_WIDTH || metadata.width >= MIN_WIDTH) {
+        if (metadata.width * scale >= MIN_WIDTH) {
             scale = MIN_WIDTH / metadata.width;
-        } else if (metadata.width < MIN_WIDTH) {
-            scale = 1;
+        } else if (metadata.width * scale < 500) {
+            scale = metadata.width >= 640 ? 640 / metadata.width : 1;
         }
     
         processedImage = processedImage.resize({
