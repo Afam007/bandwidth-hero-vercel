@@ -4,7 +4,6 @@ import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
 
 const MAX_DIMENSION = 16383;
-const MAX_DIMENSION_2 = 16383 * 2;
 const LARGE_IMAGE_THRESHOLD = 4_000_000; // Use underscores for readability
 const MEDIUM_IMAGE_THRESHOLD = 1_000_000;
 
@@ -38,13 +37,12 @@ async function compress(req, res, input) {
         let outputFormat = isAnimated ? 'webp' : format;
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
-        if (metadata.width > MAX_DIMENSION_2 || metadata.height > MAX_DIMENSION_2) {
-
-            outputFormat = 'jpeg';
-        }
-
         // Apply transformations in a pipeline to minimize intermediate buffers
         const processedImage = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount);
+        const newMetadata = await processedImage.metadata();
+        if (newMetadata.width > MAX_DIMENSION || newMetadata.height > MAX_DIMENSION) {
+            outputFormat = 'jpeg';
+        }
 
         // Use toFormat with options directly in the pipeline
         const { data, info } = await processedImage
@@ -105,12 +103,10 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
     if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
         let scale = Math.min(MAX_DIMENSION / metadata.width, MAX_DIMENSION / metadata.height);
 
-        if (metadata.width * scale >= MIN_WIDTH) {
+        if (metadata.width * scale >= MIN_WIDTH || metadata.width >= MIN_WIDTH) {
             scale = MIN_WIDTH / metadata.width;
-        } else if (metadata.width * scale >= 640) {
-            scale = 640 / metadata.width;
-        } else if (metadata.width * scale >= 500) {
-            scale = 500 / metadata.width;
+        } else if (metadata.width < MIN_WIDTH) {
+            scale = 1;
         }
     
         processedImage = processedImage.resize({
