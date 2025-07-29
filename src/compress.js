@@ -100,27 +100,33 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
        // processedImage = applyArtifactReduction(processedImage, pixelCount);
     }
 
-    const MIN_WIDTH = pixelCount > LARGE_IMAGE_THRESHOLD ? 640 : 800; // Use 640 for large images, 800 for smaller ones
+    const MIN_WIDTH = pixelCount > LARGE_IMAGE_THRESHOLD ? 720 : 800; // Use 720 for large images, 800 for smaller ones
 
     if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
         let scale = Math.min(MAX_DIMENSION / metadata.width, MAX_DIMENSION / metadata.height);
-        if (0.6 < scale && scale < 1) {
-            scale = 0.6; // Set scale to 0.6 if in range (0.6, 1)
+        let newWidth = metadata.width * scale;
+        let isInRange = (0.6 < scale && scale < 1);
+        
+        if (isInRange && (metadata.width * 0.6) > 500) {
+            scale = 0.6;
         }
-        if (scale >= 0.5) {
+        newWidth = metadata.width * scale;
+        if (newWidth > MIN_WIDTH) {
+            scale = MIN_WIDTH / metadata.width;
+        }
+        if (newWidth < 500) {
+            scale = 500 / metadata.width;
+        }
             processedImage = processedImage.resize({
                width: Math.round(metadata.width * scale),
                height: Math.round(metadata.height * scale),
                fit: 'inside',
                withoutEnlargement: true,
             });
-        }
         
-    } else if (metadata.width >= MIN_WIDTH) {
+    } else if (metadata.width > MIN_WIDTH) {
         let scale = MIN_WIDTH / metadata.width;
-        if (scale < 0.5) {
-            scale = 0.5;
-        }
+        
         processedImage = processedImage.resize({
            width: Math.round(metadata.width * scale),
            height: Math.round(metadata.height * scale),
