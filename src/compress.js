@@ -43,6 +43,7 @@ async function compress(req, res, input) {
         if (newMetadata.width > MAX_DIMENSION || newMetadata.height > MAX_DIMENSION) {
             outputFormat = 'jpeg';
         }
+        console.log(newMetadata.height);
 
         // Use toFormat with options directly in the pipeline
         const { data, info } = await processedImage
