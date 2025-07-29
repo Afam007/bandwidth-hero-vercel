@@ -104,27 +104,23 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
 
     if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
         let scale = Math.min(MAX_DIMENSION / metadata.width, MAX_DIMENSION / metadata.height);
-        let newWidth = metadata.width * scale;
-        let isInRange = (0.6 < scale && scale < 1);
-        
-        if (isInRange && (metadata.width * 0.6) > 500) {
-            scale = 0.6;
-        }
-        newWidth = metadata.width * scale;
-        if (newWidth > MIN_WIDTH) {
+
+        if (metadata.width * scale >= MIN_WIDTH) {
             scale = MIN_WIDTH / metadata.width;
-        }
-        if (newWidth < 500) {
+        } else if (metadata.width * scale >= 640) {
+            scale = 640 / metadata.width;
+        } else if (metadata.width * scale >= 500) {
             scale = 500 / metadata.width;
         }
-            processedImage = processedImage.resize({
+    
+        processedImage = processedImage.resize({
                width: Math.round(metadata.width * scale),
                height: Math.round(metadata.height * scale),
                fit: 'inside',
                withoutEnlargement: true,
             });
         
-    } else if (metadata.width > MIN_WIDTH) {
+    } else if (metadata.width >= MIN_WIDTH) {
         let scale = MIN_WIDTH / metadata.width;
         
         processedImage = processedImage.resize({
