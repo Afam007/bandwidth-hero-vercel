@@ -38,13 +38,9 @@ async function compress(req, res, input) {
         const avifParams = outputFormat === 'avif' ? optimizeAvifParams(metadata.width, metadata.height) : {};
 
         // Apply transformations in a pipeline to minimize intermediate buffers
-        const processedImage = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount);
-        const newMetadata = await processedImage.metadata();
-        if (newMetadata.width > MAX_DIMENSION || newMetadata.height > MAX_DIMENSION) {
-            outputFormat = 'jpeg';
-        }
-        console.log(newMetadata.height);
-
+        const { processedImage, useJpeg} = prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount);
+        outputFormat = useJpeg ? 'jpeg' : outputFormat;
+        
         // Use toFormat with options directly in the pipeline
         const { data, info } = await processedImage
             .toFormat(outputFormat, getFormatOptions(outputFormat, compressionQuality, avifParams, isAnimated))
@@ -91,6 +87,7 @@ function getFormatOptions(outputFormat, quality, avifParams, isAnimated) {
 
 function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount) {
     let processedImage = sharpInstance.clone(); // Clone to avoid mutating the original instance
+    let useJpeg = false;
 
     if (grayscale) {
         processedImage = processedImage.grayscale();
@@ -107,6 +104,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
         if (metadata.width * scale >= MIN_WIDTH) {
             scale = MIN_WIDTH / metadata.width;
         } else if (metadata.width * scale < 500) {
+            useJpeg = true;
             scale = metadata.width >= 640 ? 640 / metadata.width : 1;
         }
     
@@ -128,7 +126,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
         });
     }
 
-    return processedImage;
+    return { processedImage, useJpeg };
 }
 
 function applyArtifactReduction(sharpInstance, pixelCount) {
