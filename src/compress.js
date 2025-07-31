@@ -96,7 +96,7 @@ function prepareImage(sharpInstance, grayscale, isAnimated, metadata, pixelCount
        // processedImage = applyArtifactReduction(processedImage, pixelCount);
     }
 
-    const MIN_WIDTH = pixelCount > LARGE_IMAGE_THRESHOLD ? 800 : 800; // Use 720 for large images, 800 for smaller ones
+    const MIN_WIDTH = pixelCount > LARGE_IMAGE_THRESHOLD ? 720 : 800; // Use 720 for large images, 800 for smaller ones
 
     if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
         let scale = Math.min(MAX_DIMENSION / metadata.width, MAX_DIMENSION / metadata.height);
