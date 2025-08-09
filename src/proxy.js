@@ -59,6 +59,7 @@ async function proxy(req, res) {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'x-forwarded-for': req.headers['x-forwarded-for'] || req.ip,
+            'Authorization': process.env.AUTH,
             //via: '2.0 bandwidth-hero',
         },
         timeout: { request: 10000 },
@@ -124,3 +125,4 @@ function detectContentTypeFromBuffer(buffer) {
 }
 
 export default proxy;
+
