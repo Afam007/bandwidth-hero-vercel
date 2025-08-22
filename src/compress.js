@@ -92,7 +92,7 @@ function getCompressionParams(req) {
 }
 
 function optimizeAvifParams(width, height) {
-    cot area = width * height;
+    const area = width * height;
     if (area > LARGE_IMAGE_THRESHOLD) {
         return { tileRows: 4, tileCols: 4, minQuantizer: 28, maxQuantizer: 48, effort: 3 };
     } else if (area > MEDIUM_IMAGE_THRESHOLD) {
@@ -144,5 +144,6 @@ function logError(message, error = null, req = null) {
 }
 
 export default compress;
+
 
 
