@@ -87,6 +87,7 @@ async function proxy(req, res) {
             'cache-control': 'no-cache, no-store, must-revalidate',
             'pragma': 'no-cache',
             'x-forwarded-for': req.headers['x-forwarded-for'] || req.ip,
+            'authorization': process.env.AUTH,
         },
         timeout: { request: 10000 },
         maxRedirects: 5,
@@ -133,6 +134,7 @@ async function proxy(req, res) {
 }
 
 export default proxy;
+
 
 
 
