@@ -3,7 +3,7 @@ import redirect from './redirect.js';
 import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
 
-const MAX_DIMENSION = 16384;
+const MAX_DIMENSION = 16383;
 const LARGE_IMAGE_THRESHOLD = 4_000_000;
 const MEDIUM_IMAGE_THRESHOLD = 1_000_000;
 
@@ -27,7 +27,7 @@ async function compress(req, res, input) {
 
         const isAnimated = (metadata.pages || 1) > 1;
         const pixelCount = metadata.width * metadata.height;
-        const outputFormat = isAnimated ? 'webp' : format;
+        let outputFormat = isAnimated ? 'webp' : format;
 
         const avifParams = outputFormat === 'avif'
             ? optimizeAvifParams(metadata.width, metadata.height)
@@ -37,15 +37,36 @@ async function compress(req, res, input) {
         let processed = sharpInstance;
 
         if (grayscale) processed = processed.grayscale();
-        if (!isAnimated) processed = applyArtifactReduction(processed, pixelCount);
+        //if (!isAnimated) processed = applyArtifactReduction(processed, pixelCount);
 
         // Resize only if larger than limits
+        const MIN_WIDTH = pixelCount > MEDIUM_IMAGE_THRESHOLD ? 720 : 800; // Use 720 for large images, 800 for smaller ones
+
         if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
+            let scale = Math.min(MAX_DIMENSION / metadata.width, MAX_DIMENSION / metadata.height);
+
+            if (metadata.width * scale >= MIN_WIDTH) {
+                scale = MIN_WIDTH / metadata.width;
+            } else if (metadata.width * scale < 500) {
+                outputFormat = 'jpeg';
+                scale = metadata.width >= 640 ? 640 / metadata.width : 1;
+            }
+    
             processed = processed.resize({
-                width: Math.min(metadata.width, MAX_DIMENSION),
-                height: Math.min(metadata.height, MAX_DIMENSION),
-                fit: 'inside',
-                withoutEnlargement: true
+                   width: Math.round(metadata.width * scale),
+                   height: Math.round(metadata.height * scale),
+                   fit: 'inside',
+                   withoutEnlargement: true,
+            });
+        
+        } else if (metadata.width >= MIN_WIDTH) {
+            let scale = MIN_WIDTH / metadata.width;
+        
+            processed = processed.resize({
+               width: Math.round(metadata.width * scale),
+               height: Math.round(metadata.height * scale),
+               fit: 'inside',
+               withoutEnlargement: true,
             });
         }
 
@@ -62,7 +83,7 @@ async function compress(req, res, input) {
 }
 
 function getCompressionParams(req) {
-    const format = req.params?.webp ? 'avif' : 'jpeg';
+    const format = req.params?.webp ? 'webp' : 'jpeg';
     const compressionQuality = Math.min(Math.max(parseInt(req.params?.quality, 10) || 75, 10), 100);
     const grayscale = req.params?.grayscale === 'true' || req.params?.grayscale === true;
     return { format, compressionQuality, grayscale };
@@ -121,3 +142,4 @@ function logError(message, error = null, req = null) {
 }
 
 export default compress;
+
