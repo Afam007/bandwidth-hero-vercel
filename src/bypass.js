@@ -1,190 +1,199 @@
 import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
 
-// --- Constants ---
-const MAX_BUFFER_SIZE =
-  parseInt(process.env.MAX_BUFFER_SIZE, 10) || 25 * 1024 * 1024; // 25 MB
-const DEFAULT_FILENAME = process.env.DEFAULT_FILENAME || 'file.bin';
+// ─── Config ───────────────────────────────────────────────────────────────────
 
-// MIME types safe for inline display in-browser
-const INLINE_MIME_PATTERN =
-  /^(image\/(jpeg|png|gif|webp|avif|svg\+xml)|text\/(plain|html|css)|application\/(pdf|json)|video\/(mp4|webm|ogg)|audio\/(mpeg|ogg|wav))$/i;
+const MAX_BUFFER_SIZE  = parseInt(process.env.MAX_BUFFER_SIZE, 10) || 25 * 1024 * 1024;
+const DEFAULT_FILENAME = process.env.DEFAULT_FILENAME || 'file.bin';
+const DEFAULT_MIME     = 'application/octet-stream';
 
 /**
- * Extract a safe, RFC 5987-encoded filename from the URL or fall back to default.
- *
- * Bug fixed: bare `filename=` doesn't handle Unicode/spaces correctly.
- * We now emit both the ASCII fallback and filename*= (RFC 5987) so all
- * browsers get the right name.
+ * MIME types that browsers can render inline safely.
+ * Grouped by category for readability and easy extension.
  */
-function extractFilename(urlString, defaultFilename) {
-  try {
-    const parsed = new URL(urlString);
+const INLINE_MIME_TYPES = new Set([
+  // Images
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/svg+xml',
+  // Text
+  'text/plain', 'text/html', 'text/css',
+  // Application
+  'application/pdf', 'application/json',
+  // Video
+  'video/mp4', 'video/webm', 'video/ogg',
+  // Audio
+  'audio/mpeg', 'audio/ogg', 'audio/wav',
+]);
 
-    // 1. Prefer ?filename= query param if caller supplies one
-    const qpFilename = parsed.searchParams.get('filename');
-    if (qpFilename) {
-      const safe = sanitizeFilename(decodeURIComponent(qpFilename));
+// ─── Filename Extraction ──────────────────────────────────────────────────────
+
+/**
+ * Extract a sanitized filename from the URL, preferring a `?filename=` query
+ * param, then falling back to the last path segment.
+ *
+ * @param {string} urlString
+ * @returns {string}
+ */
+function extractFilename(urlString) {
+  try {
+    const { searchParams, pathname } = new URL(urlString);
+
+    const fromQuery = searchParams.get('filename');
+    if (fromQuery) {
+      const safe = sanitizeFilename(decodeURIComponent(fromQuery));
       if (safe) return safe;
     }
 
-    // 2. Fall back to last non-empty path segment
-    const lastSegment = parsed.pathname.split('/').filter(Boolean).pop();
-    if (!lastSegment) return defaultFilename;
-
-    // Strip query strings that may have leaked into the path
-    const withoutQuery = lastSegment.split('?')[0];
-    const decoded = decodeURIComponent(withoutQuery);
-    return sanitizeFilename(decoded) || defaultFilename;
+    const segment = pathname.split('/').filter(Boolean).pop();
+    if (segment) {
+      // Strip any leaked query string from the path segment
+      const safe = sanitizeFilename(decodeURIComponent(segment.split('?')[0]));
+      if (safe) return safe;
+    }
   } catch {
-    return defaultFilename;
+    // Malformed URL — fall through to default
   }
+
+  return DEFAULT_FILENAME;
 }
 
+// ─── Content-Disposition ──────────────────────────────────────────────────────
+
 /**
- * Build a Content-Disposition header value that is safe for all clients.
+ * Build a Content-Disposition value with both an ASCII fallback and an
+ * RFC 5987 UTF-8 encoded filename for full browser compatibility.
  *
- * Bug fixed: bare filename="…" breaks on filenames with non-ASCII chars or
- * commas/quotes.  RFC 5987 (filename*=UTF-8''…) is the correct solution.
+ * @param {'inline' | 'attachment'} disposition
+ * @param {string} filename
+ * @returns {string}
  */
 function buildContentDisposition(disposition, filename) {
-  // ASCII-safe fallback (strip anything outside printable ASCII)
-  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
-
-  // Percent-encode for RFC 5987
+  const ascii   = filename.replace(/[^\x20-\x7E"\\]/g, '_');
   const encoded = encodeURIComponent(filename).replace(
     /['()*!]/g,
     (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`
   );
-
-  return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
 /**
- * Determine whether the content should render inline or prompt a download.
+ * Determine whether content should render inline or force a download.
+ * Strips MIME parameters (e.g. `; charset=utf-8`) before the lookup.
  *
- * Bug fixed: the original regex matched `svg` but the real MIME type is
- * `image/svg+xml`.  Also `application/json` and others were missing.
+ * @param {string | undefined} contentType
+ * @returns {'inline' | 'attachment'}
  */
-function getDisposition(contentType) {
-  if (!contentType) return 'attachment';
-  // Strip parameters like "; charset=utf-8" before testing
-  const mime = contentType.split(';')[0].trim();
-  return INLINE_MIME_PATTERN.test(mime) ? 'inline' : 'attachment';
+function resolveDisposition(contentType) {
+  const mime = contentType?.split(';')[0].trim().toLowerCase();
+  return mime && INLINE_MIME_TYPES.has(mime) ? 'inline' : 'attachment';
 }
 
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+/** @typedef {{ status: number, body: object | null }} ValidationError */
+
 /**
- * Validate that req.params carries the required fields and that the buffer
- * is usable before we touch the response object.
+ * Validate request and buffer before touching the response.
  *
- * Returns null on success, or an { status, body } error descriptor.
+ * @param {import('express').Request} req
+ * @param {Buffer} buffer
+ * @returns {ValidationError | null}  null means valid
  */
 function validateInputs(req, buffer) {
+  if (!req || typeof req !== 'object') {
+    return { status: 500, body: { error: 'Internal error: invalid request object' } };
+  }
   if (!Buffer.isBuffer(buffer)) {
-    return { status: 500, body: { error: 'Internal Server Error: Invalid content buffer' } };
+    return { status: 500, body: { error: 'Internal error: content buffer is not a Buffer' } };
   }
   if (buffer.length === 0) {
-    return { status: 204, body: null }; // Nothing to send
+    return { status: 204, body: null };
   }
   if (buffer.length > MAX_BUFFER_SIZE) {
     return {
       status: 413,
-      body: { error: `Content Too Large: ${buffer.length} bytes exceeds ${MAX_BUFFER_SIZE} byte limit` },
+      body: { error: `Content too large: ${buffer.length} B exceeds ${MAX_BUFFER_SIZE} B limit` },
     };
   }
-  if (!req || typeof req !== 'object') {
-    return { status: 500, body: { error: 'Internal Server Error: Invalid request object' } };
-  }
-  return null; // All good
+  return null;
 }
 
+// ─── Response Helpers ─────────────────────────────────────────────────────────
+
 /**
- * Safely end the response.  Guards against writing to an already-closed socket.
+ * Safely write an error response, guarding against already-closed sockets.
+ *
+ * @param {import('express').Response} res
+ * @param {number} status
+ * @param {object | null} body
  */
 function safeEnd(res, status, body) {
+  if (!res || res.headersSent || res.writableEnded) return;
   try {
-    if (!res || res.headersSent || res.writableEnded) return;
-    if (body === null) {
-      res.status(status).end();
-    } else {
-      res.status(status).json(body);
-    }
+    body === null ? res.status(status).end() : res.status(status).json(body);
   } catch (err) {
-    // Socket was destroyed before we could respond — nothing we can do
-    console.warn(`⚠️ Could not send error response: ${err.message}`);
+    console.warn(`bypass: could not write error response — ${err.message}`);
   }
 }
 
 /**
- * Main Bypass Function
+ * Apply hardened security headers to the response.
  *
- * Sends a pre-buffered response directly to the client, bypassing any
- * upstream transform pipeline.
+ * @param {import('express').Response} res
+ */
+function applySecurityHeaders(res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options',        'DENY');
+  res.setHeader('X-XSS-Protection',       '1; mode=block');
+  res.setHeader('Referrer-Policy',        'no-referrer');
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Send a pre-buffered response directly to the client, bypassing any upstream
+ * transform pipeline.
  *
  * @param {import('express').Request}  req
  * @param {import('express').Response} res
- * @param {Buffer}                     buffer  — fully-loaded response body
+ * @param {Buffer}                     buffer  Fully-loaded response body
  */
 export default function bypass(req, res, buffer) {
-  // ── 0. Guard: response must still be writable ────────────────────────────
   if (!res || res.headersSent || res.writableEnded) {
-    console.warn('⚠️ bypass() called on an already-finished response — skipping');
+    console.warn('bypass: called on an already-finished response — skipping');
     return;
   }
 
-  // ── 1. Validate inputs ───────────────────────────────────────────────────
   const validationError = validateInputs(req, buffer);
   if (validationError) {
-    console.error(`❌ Bypass validation failed: ${JSON.stringify(validationError)}`);
+    console.error('bypass: validation failed', validationError);
     safeEnd(res, validationError.status, validationError.body);
     return;
   }
 
   try {
-    // ── 2. Derive metadata ─────────────────────────────────────────────────
-    const originUrl   = req.params?.url   ?? '';
-    // Bug fixed: fall back to 'application/octet-stream' only when the value
-    // is truly absent — an empty string should also trigger the default.
-    const contentType = req.params?.originType?.trim() || 'application/octet-stream';
-    const filename    = extractFilename(originUrl, DEFAULT_FILENAME);
-    const disposition = getDisposition(contentType);
+    const originUrl   = req.params?.url ?? '';
+    const contentType = req.params?.originType?.trim() || DEFAULT_MIME;
+    const filename    = extractFilename(originUrl);
+    const disposition = resolveDisposition(contentType);
 
-    // ── 3. Set response headers ────────────────────────────────────────────
+    applySecurityHeaders(res);
 
-    // Security hardening
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    // Prevent the proxied content from leaking the referrer of the proxy itself
-    res.setHeader('Referrer-Policy', 'no-referrer');
-
-    // Content metadata
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Content-Type',        contentType);
+    res.setHeader('Content-Length',      buffer.length);
     res.setHeader('Content-Disposition', buildContentDisposition(disposition, filename));
+    res.setHeader('X-Proxy-Bypass',      '1');
 
-    // Proxy identification
-    res.setHeader('X-Proxy-Bypass', '1');
-
-    // Bug fixed: the original code used `public, immutable` as a default for
-    // ALL content, including authenticated or user-specific responses. That
-    // can cause sensitive data to be cached by shared CDN/proxy nodes.
-    // A `private` default is correct; callers that want aggressive caching
-    // should set Cache-Control upstream before calling bypass().
+    // Default to private cache — callers that want CDN caching should set
+    // Cache-Control upstream before invoking bypass().
     if (!res.getHeader('Cache-Control')) {
-      res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+      res.setHeader('Cache-Control', 'private, no-cache, must-revalidate');
     }
 
-    // ── 4. Send the buffer ─────────────────────────────────────────────────
-    // res.end(buffer) is optimal — no PassThrough stream needed since the
-    // data is already fully materialised in memory.
     res.end(buffer);
 
-    console.debug(
-      `✅ bypass() → ${res.statusCode} | ${contentType} | ${buffer.length} B | ${filename}`
-    );
-  } catch (error) {
-    console.error(`❌ bypass() failed: ${error.message}`, error);
+    console.debug(`bypass: 200 | ${contentType} | ${buffer.length} B | ${filename}`);
+  } catch (err) {
+    console.error(`bypass: unexpected error — ${err.message}`, err);
     safeEnd(res, 500, { error: 'Failed to send proxied content' });
   }
 }
