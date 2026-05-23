@@ -3,172 +3,235 @@ import redirect from './redirect.js';
 import { URL } from 'url';
 import sanitizeFilename from 'sanitize-filename';
 
-//Optimize Sharp Configuration
+// ─── Sharp Global Config ──────────────────────────────────────────────────────
 sharp.cache({ memory: 50, files: 0 });
 sharp.concurrency(1);
 sharp.simd(true);
 
-const MAX_DIMENSION = 16384;
-const LARGE_IMAGE_THRESHOLD = 4_000_000;
-const MEDIUM_IMAGE_THRESHOLD = 1_000_000;
-const MAX_PIXEL_LIMIT = 100_000_000; // safety for serverless memory
-const PROCESSING_TIMEOUT_MS = 60_000; // 60s max per image
+// ─── Constants ────────────────────────────────────────────────────────────────
+const MAX_DIMENSION        = 16_384;
+const LARGE_IMAGE_PIXELS   = 4_000_000;
+const MEDIUM_IMAGE_PIXELS  = 1_000_000;
+const MAX_PIXEL_LIMIT      = 100_000_000;
+const PROCESSING_TIMEOUT   = 60_000;
 
+// ─── Main Entry Point ─────────────────────────────────────────────────────────
+
+/**
+ * Compress and serve an image, streaming large files to save RAM.
+ *
+ * @param {import('express').Request}  req
+ * @param {import('express').Response} res
+ * @param {Buffer | string}            input  - Raw buffer or file path
+ */
 export default async function compress(req, res, input) {
-  try {
-    // --- Input validation ---
-  // Add timeout to entire processing
-    const timeout = setTimeout(() => {
-      if (processed) processed.destroy?.(); // sharp 0.33+ has destroy()
-      fail('Image processing timeout', req, res);
-    }, PROCESSING_TIMEOUT_MS);
-    
-    if (!Buffer.isBuffer(input) && typeof input !== 'string') {
-      return fail('Invalid input: must be Buffer or file path', req, res);
-    }
+  validateInput(input);
 
-    const { format, compressionQuality, grayscale } = getCompressionParams(req);
-    const sharpInstance = sharp(input, {
-      animated: true,
-      limitInputPixels: MAX_PIXEL_LIMIT // prevent decompression bombs
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), PROCESSING_TIMEOUT);
+
+  // Resolve outside try so catch/finally can reference them
+  let pipeline = null;
+
+  try {
+    const params  = parseCompressionParams(req);
+    const source  = sharp(input, {
+      animated:         true,
+      limitInputPixels: MAX_PIXEL_LIMIT,
     });
 
-    const metadata = await sharpInstance.metadata();
+    const metadata = await source.metadata();
+    assertValidMetadata(metadata);
 
-    if (!metadata?.width || !metadata?.height) {
-      return fail('Invalid or missing metadata', req, res);
-    }
+    const { width, height, pages = 1 } = metadata;
+    const isAnimated  = pages > 1;
+    const pixelCount  = width * height;
 
-    const { width, height } = metadata;
-    const isAnimated = (metadata.pages || 1) > 1;
-    const pixelCount = width * height;
-
-    // --- Safety guard for extremely large files ---
     if (pixelCount > MAX_PIXEL_LIMIT) {
-      return fail('Image too large for processing', req, res);
+      throw new CompressionError('Image exceeds maximum pixel limit', 413);
     }
 
-    const outputFormat = isAnimated ? 'webp' : format;
-    const avifParams = outputFormat === 'avif'
-      ? optimizeAvifParams(width, height)
-      : {};
+    const format       = isAnimated ? 'webp' : params.format;
+    const formatOpts   = buildFormatOptions(format, params.quality, width, height, isAnimated);
 
-    // --- Processing chain (built dynamically) ---
-    let processed = sharpInstance.clone();
+    // Build the Sharp pipeline
+    pipeline = buildPipeline(source, { grayscale: params.grayscale, width, height });
+    pipeline = pipeline.toFormat(format, formatOpts);
 
-    if (grayscale) processed = processed.grayscale();
-
-    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-      processed = processed.resize({
-        width: Math.min(width, MAX_DIMENSION),
-        height: Math.min(height, MAX_DIMENSION),
-        fit: 'inside',
-        withoutEnlargement: true
-      });
-    }
-
-    // --- Compression and output ---
-    const formatOptions = getFormatOptions(outputFormat, compressionQuality, avifParams, isAnimated);
-
-    // If file >2MB, stream to response (saves RAM)
-    if (Buffer.isBuffer(input) && input.length > 2_000_000) {
-      res.setHeader('Content-Type', `image/${outputFormat}`);
-      res.setHeader('Content-Disposition', 'inline');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Cache-Control', 'public, max-age=31536000');
-
-      const stream = processed.toFormat(outputFormat, formatOptions);
-
-      // Proper cleanup on client disconnect
-      req.socket.on('close', () => {
-        stream.destroy?.();
-      });
-
-      stream
-        .pipe(res)
-        .on('error', (err) => {
-          if (!res.headersSent) fail('Streaming failed', req, res, err);
-        });
-
-      clearTimeout(timeout);
+    // ── Stream path: large buffers skip toBuffer() to save RAM ───────────────
+    const isLargeBuffer = Buffer.isBuffer(input) && input.length > 2_000_000;
+    if (isLargeBuffer) {
+      await streamImage(pipeline, { req, res, format, abortController });
       return;
     }
 
-    const { data, info } = await processed
-      .toFormat(outputFormat, formatOptions)
-      .toBuffer({ resolveWithObject: true });
+    // ── Buffer path ───────────────────────────────────────────────────────────
+    const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
 
-    clearTimeout(timeout);
-    
-    sendImage(res, data, outputFormat, req.params.url || '', req.params.originSize || 0, info.size);
+    sendImage(res, data, format, {
+      url:        req.params.url ?? '',
+      originSize: req.params.originSize ?? 0,
+      bytesSaved: Math.max((req.params.originSize ?? 0) - info.size, 0),
+    });
 
   } catch (err) {
+    pipeline?.destroy?.();
+    fail(err, req, res);
+  } finally {
     clearTimeout(timeout);
-    if (sharpInstance) sharpInstance.destroy?.();
-    if (processed) processed.destroy?.();
-    fail('Error during image compression', req, res, err);
   }
 }
 
-function getCompressionParams(req) {
-  const format = req.params?.webp ? 'avif' : 'jpeg';
-  const compressionQuality = clamp(parseInt(req.params?.quality, 10) || 75, 10, 100);
-  const grayscale = req.params?.grayscale === 'true' || req.params?.grayscale === true;
-  return { format, compressionQuality, grayscale };
+// ─── Pipeline Builder ─────────────────────────────────────────────────────────
+
+function buildPipeline(source, { grayscale, width, height }) {
+  let pipe = source.clone();
+
+  if (grayscale) {
+    pipe = pipe.grayscale();
+  }
+
+  const needsResize = width > MAX_DIMENSION || height > MAX_DIMENSION;
+  if (needsResize) {
+    pipe = pipe.resize({
+      width:               Math.min(width, MAX_DIMENSION),
+      height:              Math.min(height, MAX_DIMENSION),
+      fit:                 'inside',
+      withoutEnlargement: true,
+    });
+  }
+
+  return pipe;
 }
 
-function clamp(v, min, max) {
-  return Math.min(Math.max(v, min), max);
+// ─── Streaming ────────────────────────────────────────────────────────────────
+
+/**
+ * Pipe a Sharp transform stream directly to the HTTP response.
+ * Cleans up on client disconnect or abort signal.
+ */
+function streamImage(pipeline, { req, res, format, abortController }) {
+  return new Promise((resolve, reject) => {
+    setCommonHeaders(res, format);
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    const stream = pipeline; // pipeline is already a Transform stream
+
+    const cleanup = () => {
+      stream.destroy?.();
+      abortController.abort();
+    };
+
+    req.socket.once('close', cleanup);
+    abortController.signal.addEventListener('abort', cleanup, { once: true });
+
+    stream
+      .pipe(res)
+      .on('finish', resolve)
+      .on('error', (err) => {
+        if (!res.headersSent) reject(new CompressionError('Streaming failed', 500, err));
+        else resolve(); // headers sent — nothing more we can do
+      });
+  });
 }
 
-function optimizeAvifParams(width, height) {
-  const area = width * height;
-  if (area > LARGE_IMAGE_THRESHOLD)
-    return { tileRows: 1, tileCols: 1, minQuantizer: 20, maxQuantizer: 40, effort: 3 };
-  if (area > MEDIUM_IMAGE_THRESHOLD)
-    return { tileRows: 1, tileCols: 1, minQuantizer: 28, maxQuantizer: 48, effort: 3 };
-  return { tileRows: 1, tileCols: 1, minQuantizer: 26, maxQuantizer: 46, effort: 4 };
-}
+// ─── Response Helpers ─────────────────────────────────────────────────────────
 
-function getFormatOptions(format, quality, avifParams, isAnimated) {
-  const base = {
-    quality,
-    alphaQuality: 80,
-    bitdepth: 8,
-    chromaSubsampling: '4:2:0',
-    speed: 6,
-    loop: isAnimated ? 0 : undefined
-  };
-  return format === 'avif' ? { ...base, ...avifParams } : base;
-}
+function sendImage(res, data, format, { url, originSize, bytesSaved }) {
+  const rawName = (() => {
+    try { return new URL(url).pathname.split('/').pop() || 'image'; }
+    catch { return 'image'; }
+  })();
+  const filename = `${sanitizeFilename(rawName)}.${format}`;
 
-function sendImage(res, data, format, url, originSize, compressedSize) {
-  const filename = sanitizeFilename(new URL(url).pathname.split('/').pop() || 'image') + `.${format}`;
-  res.setHeader('Content-Type', `image/${format}`);
-  res.setHeader('Content-Length', data.length);
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('x-original-size', originSize);
-  res.setHeader('x-bytes-saved', Math.max(originSize - compressedSize, 0));
-  res.setHeader('Cache-Control', 'public, max-age=31536000');
-  res.setHeader('CDN-Cache-Control', 'public, max-age=31536000');
-  res.setHeader('Vercel-CDN-Cache-Control', 'public, max-age=31536000');
+  setCommonHeaders(res, format);
+  res.setHeader('Content-Length',       data.length);
+  res.setHeader('Content-Disposition',  `inline; filename="${filename}"`);
+  res.setHeader('x-original-size',      originSize);
+  res.setHeader('x-bytes-saved',        bytesSaved);
   res.status(200).end(data);
 }
 
-function fail(message, req, res, err = null) {
+function setCommonHeaders(res, format) {
+  const ONE_YEAR = 'public, max-age=31536000, immutable';
+  res.setHeader('Content-Type',                  `image/${format}`);
+  res.setHeader('X-Content-Type-Options',        'nosniff');
+  res.setHeader('Cache-Control',                 ONE_YEAR);
+  res.setHeader('CDN-Cache-Control',             ONE_YEAR);
+  res.setHeader('Vercel-CDN-Cache-Control',      ONE_YEAR);
+}
+
+// ─── Format / Quality ─────────────────────────────────────────────────────────
+
+function parseCompressionParams(req) {
+  return {
+    format:  req.params?.webp ? 'avif' : 'jpeg',
+    quality: clamp(parseInt(req.params?.quality, 10) || 75, 10, 100),
+    grayscale: req.params?.grayscale === 'true' || req.params?.grayscale === true,
+  };
+}
+
+function buildFormatOptions(format, quality, width, height, isAnimated) {
+  const base = {
+    quality,
+    alphaQuality:       80,
+    bitdepth:           8,
+    chromaSubsampling:  '4:2:0',
+    speed:              6,
+    ...(isAnimated && { loop: 0 }),
+  };
+
+  return format === 'avif'
+    ? { ...base, ...avifTileParams(width * height) }
+    : base;
+}
+
+function avifTileParams(area) {
+  if (area > LARGE_IMAGE_PIXELS)  return { tileRows: 1, tileCols: 1, minQuantizer: 20, maxQuantizer: 40, effort: 3 };
+  if (area > MEDIUM_IMAGE_PIXELS) return { tileRows: 1, tileCols: 1, minQuantizer: 28, maxQuantizer: 48, effort: 3 };
+  return                                 { tileRows: 1, tileCols: 1, minQuantizer: 26, maxQuantizer: 46, effort: 4 };
+}
+
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+function validateInput(input) {
+  if (!Buffer.isBuffer(input) && typeof input !== 'string') {
+    throw new CompressionError('Invalid input: must be a Buffer or file path', 400);
+  }
+}
+
+function assertValidMetadata(metadata) {
+  if (!metadata?.width || !metadata?.height) {
+    throw new CompressionError('Could not read image metadata', 422);
+  }
+}
+
+// ─── Error Handling ───────────────────────────────────────────────────────────
+
+class CompressionError extends Error {
+  /** @param {string} message @param {number} statusCode @param {Error} [cause] */
+  constructor(message, statusCode = 500, cause = null) {
+    super(message, { cause });
+    this.name        = 'CompressionError';
+    this.statusCode  = statusCode;
+  }
+}
+
+function fail(err, req, res) {
+  const isDev = process.env.NODE_ENV === 'development';
+
   console.error(JSON.stringify({
-    level: 'error',
-    message,
-    url: req?.params?.url?.slice(0, 100),
-    error: err?.message,
-    stack: process.env.NODE_ENV === 'development' ? err?.stack : undefined
+    level:      'error',
+    message:    err?.message,
+    statusCode: err?.statusCode,
+    url:        req?.params?.url?.slice(0, 100),
+    cause:      err?.cause?.message,
+    ...(isDev && { stack: err?.stack }),
   }));
+
   redirect(req, res);
 }
 
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
-
-
-
-
+const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
