@@ -9,7 +9,7 @@ sharp.concurrency(1);
 sharp.simd(true);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const MAX_DIMENSION        = 16_384;
+const MAX_DIMENSION        = 16_383;
 const LARGE_IMAGE_PIXELS   = 4_000_000;
 const MEDIUM_IMAGE_PIXELS  = 1_000_000;
 const MAX_PIXEL_LIMIT      = 100_000_000;
@@ -55,7 +55,7 @@ export default async function compress(req, res, input) {
     const formatOpts   = buildFormatOptions(format, params.quality, width, height, isAnimated);
 
     // Build the Sharp pipeline
-    pipeline = buildPipeline(source, { grayscale: params.grayscale, width, height });
+    [pipeline, format] = buildPipeline(source, { grayscale: params.grayscale, width, height, pixelCount, format });
     pipeline = pipeline.toFormat(format, formatOpts);
 
     // ── Stream path: large buffers skip toBuffer() to save RAM ───────────────
@@ -84,24 +84,44 @@ export default async function compress(req, res, input) {
 
 // ─── Pipeline Builder ─────────────────────────────────────────────────────────
 
-function buildPipeline(source, { grayscale, width, height }) {
+function buildPipeline(source, { grayscale, width, height, pixelCount, format }) {
   let pipe = source.clone();
 
   if (grayscale) {
     pipe = pipe.grayscale();
   }
 
-  const needsResize = width > MAX_DIMENSION || height > MAX_DIMENSION;
-  if (needsResize) {
+  const MIN_WIDTH = pixelCount > MEDIUM_IMAGE_THRESHOLD ? 720 : 800;
+  if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+    let scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+
+    if (width * scale >= MIN_WIDTH) {
+      scale = MIN_WIDTH / width;
+    } else if (width * scale < 500) {
+      format = 'jpeg';
+      scale = width >= 640 ? 640 / width : 1;
+    }
+    
     pipe = pipe.resize({
-      width:               Math.min(width, MAX_DIMENSION),
-      height:              Math.min(height, MAX_DIMENSION),
-      fit:                 'inside',
+      width: Math.round(width * scale),
+      height: Math.round(height * scale),
+      fit: 'inside',
       withoutEnlargement: true,
     });
-  }
+        
+  } else if (width >= MIN_WIDTH) {
+      const scale = MIN_WIDTH / width;
 
-  return pipe;
+      pipe = pipe.resize({
+        width: Math.round(width * scale),
+        height: Math.round(height * scale),
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+    }
+
+
+  return [pipe, format];
 }
 
 // ─── Streaming ────────────────────────────────────────────────────────────────
@@ -165,7 +185,7 @@ function setCommonHeaders(res, format) {
 
 function parseCompressionParams(req) {
   return {
-    format:  req.params?.webp ? 'avif' : 'jpeg',
+    format:  req.params?.webp ? 'webp' : 'jpeg',
     quality: clamp(parseInt(req.params?.quality, 10) || 75, 10, 100),
     grayscale: req.params?.grayscale === 'true' || req.params?.grayscale === true,
   };
