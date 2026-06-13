@@ -91,7 +91,7 @@ function buildPipeline(source, { grayscale, width, height, pixelCount, format })
     pipe = pipe.grayscale();
   }
 
-  const MIN_WIDTH = pixelCount > MEDIUM_IMAGE_THRESHOLD ? 720 : 800;
+  const MIN_WIDTH = pixelCount > MEDIUM_IMAGE_PIXELS ? 720 : 800;
   if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
     let scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
 
