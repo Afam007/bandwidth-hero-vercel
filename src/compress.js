@@ -51,7 +51,7 @@ export default async function compress(req, res, input) {
       throw new CompressionError('Image exceeds maximum pixel limit', 413);
     }
 
-    const format       = isAnimated ? 'webp' : params.format;
+    let format       = isAnimated ? 'webp' : params.format;
     const formatOpts   = buildFormatOptions(format, params.quality, width, height, isAnimated);
 
     // Build the Sharp pipeline
